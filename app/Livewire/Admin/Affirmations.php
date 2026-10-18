@@ -58,7 +58,7 @@ class Affirmations extends Component
         $this->validate([
             'title' => 'required|string|max:190',
             'content_type' => config('higherlife.text_only', true) ? 'required|in:text' : 'required|in:text,audio,video',
-            'content' => 'required_if:content_type,text|nullable|string|max:5000',
+            'content' => 'required_if:content_type,text|nullable|string|max:50000',
             'category_id' => 'nullable|exists:categories,id',
             'status' => 'required|in:draft,published',
             'thumbnailFile' => 'nullable|image|max:4096',

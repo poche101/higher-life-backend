@@ -23,6 +23,10 @@ class SubscriptionController extends Controller
 
         return [
             'is_premium' => $sub !== null,
+            'has_access' => $request->user()->hasAccess(),
+            'on_trial' => $request->user()->onTrial(),
+            'trial_ends_at' => $request->user()->trial_ends_at?->toIso8601String(),
+            'trial_days_left' => $request->user()->trialDaysLeft(),
             'status' => $sub?->status ?? 'none',
             'plan' => $sub?->plan?->name,
             'starts_at' => $sub?->starts_at?->toIso8601String(),

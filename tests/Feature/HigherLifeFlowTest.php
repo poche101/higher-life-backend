@@ -14,10 +14,12 @@ use Tests\TestCase;
 class HigherLifeFlowTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\FreshAuthPerRequest;
 
     protected function setUp(): void
     {
         parent::setUp();
+        config(['higherlife.trial_days' => 0]);
         config(['espee.driver' => 'fake']);
         $this->seed();
     }
@@ -49,9 +51,6 @@ class HigherLifeFlowTest extends TestCase
         $this->getJson('/api/v1/auth/me', $h)->assertOk();
         $this->getJson('/api/v1/subscription/plans')->assertOk()->assertJsonStructure(['data' => [['id', 'name', 'price', 'currency']]]);
         $this->getJson('/api/v1/subscription/status', $h)->assertOk()->assertJsonPath('is_premium', false);
-
-        // The test app keeps the Sanctum guard's cached user between requests; drop it so this request is truly signed-out.
-        $this->app['auth']->forgetGuards();
         $this->getJson('/api/v1/affirmations')->assertStatus(401); // signed-out
 
         // 2. Subscribe -> checkout -> server-side verification activates premium.
@@ -111,6 +110,7 @@ class HigherLifeFlowTest extends TestCase
     public function test_admin_bypasses_the_paywall_and_non_admin_cannot_open_admin_panel(): void
     {
         $admin = User::where('email', 'admin@higherlife.app')->first();
-        $this->actingAs($admin, 'sanctum')->getJson('/api/v1/affirmations')->assertOk();
+        $token = $admin->createToken('test')->plainTextToken;
+        $this->getJson('/api/v1/affirmations', ['Authorization' => 'Bearer '.$token])->assertOk();
     }
 }

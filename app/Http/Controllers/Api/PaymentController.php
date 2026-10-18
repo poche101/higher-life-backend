@@ -37,6 +37,7 @@ class PaymentController extends Controller
             'status' => $tx->status,
             'mode' => config('espee.driver') === 'transfer' ? 'transfer' : 'checkout',
             'is_premium' => $request->user()->fresh()->isPremium(),
+            'has_access' => $request->user()->fresh()->hasAccess(),
             'paid_at' => $tx->paid_at?->toIso8601String(),
         ]);
     }

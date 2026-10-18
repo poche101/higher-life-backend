@@ -11,8 +11,9 @@ return [
     // The embed code Espees generates is:
     //   <script src="https://merchant.espees.org/static/public/button.js"></script>
     //   <script>Espeespaybutton("<YOUR BUTTON ID>");</script>
+    // The id below is the Higher Life button; override it with ESPEE_BUTTON_ID in .env when you replace the button.
     'button_script' => env('ESPEE_BUTTON_SCRIPT', 'https://merchant.espees.org/static/public/button.js'),
-    'button_id' => env('ESPEE_BUTTON_ID', ''),
+    'button_id' => env('ESPEE_BUTTON_ID', '695bc9cfc64c3fc1adbce8ba3b559465'),
 
     // These must match the product you created for the button on the Espees Merchant dashboard.
     'product_sku' => env('ESPEE_PRODUCT_SKU', 'HLIFE-MONTHLY-001'),

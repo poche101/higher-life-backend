@@ -16,6 +16,7 @@ use Tests\TestCase;
 class EspeePaymentTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\FreshAuthPerRequest;
 
     /** What Espees' Confirm Payment API will answer with (change it inside a test before the action). */
     protected array $confirm = [];
@@ -23,6 +24,7 @@ class EspeePaymentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['higherlife.trial_days' => 0]);
         config([
             'espee.driver' => 'espee', 'espee.api_key' => 'KEY-123', 'espee.button_id' => 'BTN-TEST-ID',
             'espee.product_sku' => 'HLIFE-MONTHLY-001', 'espee.api_base' => 'https://api.espees.org',
@@ -44,6 +46,9 @@ class EspeePaymentTest extends TestCase
     {
         $r = $this->postJson('/api/v1/auth/register', ['first_name' => 'Ada', 'last_name' => 'Obi', 'email' => $email, 'password' => 'password123'])->assertCreated();
 
+        // Several users in one test: drop the guard's cached user so each request authenticates by its own token.
+        $this->app['auth']->forgetGuards();
+
         return [User::where('email', $email)->first(), ['Authorization' => 'Bearer '.$r->json('token')]];
     }
 
@@ -54,22 +59,15 @@ class EspeePaymentTest extends TestCase
         return [$r, Transaction::where('reference', $r->json('reference'))->firstOrFail()];
     }
 
-    /**
-     * The test app keeps the Sanctum guard's cached user between requests inside one test.
-     * Call this before a request made with a different user's token (production never has this problem:
-     * each request is a fresh process).
-     */
-    protected function switchUser(): void
-    {
-        $this->app['auth']->forgetGuards();
-    }
-
     /** The browser coming back from Espees: same browser (cookie) that opened the checkout page. */
     protected function back(Transaction $tx, string $page = 'success', ?string $paymentRef = 'PAYREF1234567890')
     {
         $q = $paymentRef ? '?payment_ref='.$paymentRef : '';
 
-        return $this->withCookie('hl_pay', $tx->reference)->get('/payment/'.$page.$q);
+        $response = $this->withCookie('hl_pay', $tx->reference)->get('/payment/'.$page.$q);
+        $this->defaultCookies = []; // a test-client cookie would otherwise stick to every later request
+
+        return $response;
     }
 
     public function test_subscribe_returns_a_signed_checkout_page_and_makes_no_espees_call(): void
@@ -162,7 +160,6 @@ class EspeePaymentTest extends TestCase
         $this->assertFalse($u->fresh()->isPremium());
 
         [$u2, $h2] = $this->member('b@example.com');
-        $this->switchUser();
         [, $tx2] = $this->subscribe($h2);
         $this->setConfirm(['product_sku' => 'SOME-OTHER-PRODUCT']);
         $this->back($tx2, 'success', 'PAYREF-OTHER-0001')->assertOk();
@@ -191,7 +188,6 @@ class EspeePaymentTest extends TestCase
         $this->assertTrue($a->fresh()->isPremium());
 
         [$b, $hb] = $this->member('b@example.com');
-        $this->switchUser();
         [, $txB] = $this->subscribe($hb);
         $this->back($txB, 'success', 'SHARED-PAYREF-0001')->assertOk();
 
@@ -211,7 +207,6 @@ class EspeePaymentTest extends TestCase
         $this->get('/payment/success?payment_ref=PAYREF1234567890')->assertOk()->assertSee('Back from Espees');
         // Our browser, but Espees gave no payment_ref at all.
         $this->withCookie('hl_pay', $tx->reference)->get('/payment/success')->assertOk()->assertSee('Back from Espees');
-        // withCookie() sticks for the rest of the test; drop it so the next requests are a cookie-less browser.
         $this->defaultCookies = [];
         // Nothing at all.
         $this->get('/payment/success')->assertOk()->assertSee('Payment status unavailable');
@@ -236,7 +231,6 @@ class EspeePaymentTest extends TestCase
         [, $h1] = $this->member('a@example.com');
         [, $tx] = $this->subscribe($h1);
         [, $h2] = $this->member('b@example.com');
-        $this->switchUser();
 
         $this->postJson('/api/v1/payments/verify', ['reference' => $tx->reference], $h2)->assertNotFound();
     }
@@ -261,7 +255,6 @@ class EspeePaymentTest extends TestCase
         $txA->update(['gateway_ref' => 'PAYREF-A-000001']);
 
         [$b, $hb] = $this->member('b@example.com');
-        $this->switchUser();
         [, $txB] = $this->subscribe($hb);   // no payment_ref yet
 
         $this->artisan('payments:reverify')->assertSuccessful();

@@ -13,10 +13,12 @@ use Tests\TestCase;
 class TransferPaymentTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\FreshAuthPerRequest;
 
     protected function setUp(): void
     {
         parent::setUp();
+        config(['higherlife.trial_days' => 0]);
         config(['espee.driver' => 'transfer', 'espee.transfer_code' => 'TESTCODE', 'espee.pay_url' => '']);
         $this->seed();
     }
@@ -24,6 +26,9 @@ class TransferPaymentTest extends TestCase
     protected function member(string $email = 'ada@example.com'): array
     {
         $r = $this->postJson('/api/v1/auth/register', ['first_name' => 'Ada', 'last_name' => 'Obi', 'email' => $email, 'password' => 'password123'])->assertCreated();
+
+        // Several users in one test: drop the guard's cached user so each request authenticates by its own token.
+        $this->app['auth']->forgetGuards();
 
         return [User::where('email', $email)->first(), ['Authorization' => 'Bearer '.$r->json('token')]];
     }
@@ -152,16 +157,13 @@ class TransferPaymentTest extends TestCase
     }
 
     public function test_foreign_user_cannot_submit_proof_for_someone_elses_reference(): void
-{
-    [, $h] = $this->member();
-    [, $h2] = $this->member('bob@example.com');
-    $ref = $this->postJson('/api/v1/subscription/subscribe', [], $h)->json('reference');
-
-    $this->app['auth']->forgetGuards(); // drop Ada's cached user so Bob's token is used
-
-    $this->postJson('/api/v1/payments/submit', ['reference' => $ref], $h2)->assertNotFound();
-    $this->assertSame('pending', Transaction::where('reference', $ref)->first()->status);
-}
+    {
+        [, $h] = $this->member();
+        [, $h2] = $this->member('bob@example.com');
+        $ref = $this->postJson('/api/v1/subscription/subscribe', [], $h)->json('reference');
+        $this->postJson('/api/v1/payments/submit', ['reference' => $ref], $h2)->assertNotFound();
+        $this->assertSame('pending', Transaction::where('reference', $ref)->first()->status);
+    }
 
     public function test_submit_is_rejected_outside_transfer_mode(): void
     {

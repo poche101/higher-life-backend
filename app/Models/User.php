@@ -15,7 +15,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name', 'first_name', 'last_name', 'email', 'password', 'date_of_birth', 'avatar', 'role',
-        'notifications_enabled', 'notification_time', 'reminder_frequency', 'kingschat_id',
+        'notifications_enabled', 'notification_time', 'reminder_frequency', 'kingschat_id', 'trial_ends_at',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -27,7 +27,17 @@ class User extends Authenticatable
             'password' => 'hashed',
             'date_of_birth' => 'date',
             'notifications_enabled' => 'boolean',
+            'trial_ends_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Every new account (email sign-up, KingsChat, anything) starts with a free trial.
+        static::creating(function (User $user) {
+            $days = (int) config('higherlife.trial_days', 7);
+            if ($user->trial_ends_at === null && $days > 0) $user->trial_ends_at = now()->addDays($days);
+        });
     }
 
     public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
@@ -51,5 +61,17 @@ class User extends Authenticatable
             ->first();
     }
 
+    /** Paying subscriber (an active, unexpired subscription). */
     public function isPremium(): bool { return $this->activeSubscription() !== null; }
+
+    /** Inside the free trial. */
+    public function onTrial(): bool { return $this->trial_ends_at !== null && $this->trial_ends_at->isFuture(); }
+
+    /** May read the affirmations: admin, paying subscriber, or inside the free trial. */
+    public function hasAccess(): bool { return $this->isAdmin() || $this->isPremium() || $this->onTrial(); }
+
+    public function trialDaysLeft(): int
+    {
+        return $this->onTrial() ? max(1, (int) ceil(now()->floatDiffInDays($this->trial_ends_at))) : 0;
+    }
 }

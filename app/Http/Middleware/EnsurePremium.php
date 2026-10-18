@@ -10,7 +10,7 @@ class EnsurePremium
     public function handle(Request $request, Closure $next)
     {
         $user = $request->user();
-        abort_unless($user && ($user->isAdmin() || $user->isPremium()), 402, 'A Higher Life Premium subscription is required.');
+        abort_unless($user && $user->hasAccess(), 402, 'Your free trial has ended. Subscribe to keep reading your affirmations.');
         return $next($request);
     }
 }

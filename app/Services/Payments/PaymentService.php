@@ -123,12 +123,10 @@ class PaymentService
                 $tx->update(['gateway_ref' => $paymentRef]);
             } catch (UniqueConstraintViolationException $e) {
                 // This Espees payment was already used for another subscription.
-                // Re-load the row: the failed update left gateway_ref marked as changed on $tx, so updating $tx
-                // again would try to save the duplicate payment_ref a second time and throw.
-                $fresh = $tx->fresh();
-                $fresh->update(['status' => 'review', 'metadata' => array_merge($fresh->metadata ?? [], ['reason' => 'payment_ref_reused'])]);
+                $tx = $tx->fresh(); // drop the failed gateway_ref still sitting on the model, or the save below would hit the same error
+                $tx->update(['status' => 'review', 'metadata' => array_merge($tx->metadata ?? [], ['reason' => 'payment_ref_reused'])]);
 
-                return $fresh->fresh();
+                return $tx->fresh();
             }
         }
 
@@ -193,6 +191,10 @@ class PaymentService
 
             $current = $user->activeSubscription();
             $start = $current?->expires_at && $current->expires_at->isFuture() ? $current->expires_at : now();
+            // Paying during the free trial never wastes trial days: the paid month starts when the trial ends.
+            if ($user->trial_ends_at && $user->trial_ends_at->isFuture() && $user->trial_ends_at->greaterThan($start)) {
+                $start = $user->trial_ends_at;
+            }
 
             $sub->update([
                 'status' => 'active',

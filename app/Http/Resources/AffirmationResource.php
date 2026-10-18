@@ -13,7 +13,7 @@ class AffirmationResource extends JsonResource
     {
         if (! $request->attributes->has('hl_premium')) {
             $u = $request->user('sanctum');
-            $request->attributes->set('hl_premium', (bool) ($u && ($u->isAdmin() || $u->isPremium())));
+            $request->attributes->set('hl_premium', (bool) ($u && $u->hasAccess()));
         }
         return $request->attributes->get('hl_premium');
     }

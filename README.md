@@ -14,7 +14,8 @@ composer require livewire/livewire
 In `.env` configure MySQL, Redis (`QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`), then add:
 ```
 ESPEE_DRIVER=espee           # espee (Pay with Espees button, production) | transfer (manual fallback) | fake (local only)
-ESPEE_BUTTON_ID=             # id inside Espeespaybutton("...") from the Espees Merchant dashboard
+ESPEE_BUTTON_ID=695bc9cfc64c3fc1adbce8ba3b559465   # id inside Espeespaybutton("...") from the Espees Merchant dashboard
+TRIAL_DAYS=7                 # free trial for every new account (0 = off)
 ESPEE_API_KEY=               # developer-console token, used only to confirm payments (not the merchant ID / wallet address)
 ESPEE_TRANSFER_CODE=z5project  # only used by the transfer fallback (placeholder)
 ESPEE_CURRENCY=ESP
@@ -58,7 +59,7 @@ If a user pays but Espees does not hand us a `payment_ref` (or they return in a 
 ```
 APP_URL=https://hlife.christembassylz5.org
 ESPEE_DRIVER=espee
-ESPEE_BUTTON_ID=            # the id inside Espeespaybutton("…") from the Espees dashboard
+ESPEE_BUTTON_ID=695bc9cfc64c3fc1adbce8ba3b559465   # the id inside Espeespaybutton("…") from the Espees dashboard
 ESPEE_API_KEY=              # developer-console token — used only for Confirm Payment (not the merchant ID or wallet address)
 # optional: ESPEE_BUTTON_SCRIPT, ESPEE_PRODUCT_SKU, ESPEE_PRODUCT_NAME
 ```
@@ -89,3 +90,9 @@ php artisan test
 `HigherLifeFlowTest` (fake driver) covers sign-up, the paywall (402 until subscribed), fake-gateway payment + server-side verification, content, favorites, progress/streaks, collections, profile, device token, cancel, and KingsChat sign-in (with the KingsChat API mocked).
 
 `TransferPaymentTest` covers the manual transfer flow: instructions, proof submission, reuse of references, admin approve/reject, and access control.
+
+
+## Free trial
+Every new account gets `TRIAL_DAYS` (default 7) days of full access to the affirmations (`users.trial_ends_at`).
+When it ends the API answers 402 and the app shows the paywall. Paying during the trial starts the paid month when the trial ends.
+Run `php artisan migrate` to add the column; existing never-subscribed users get a 7-day trial from migration time.

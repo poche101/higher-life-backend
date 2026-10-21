@@ -8,8 +8,12 @@ use RuntimeException;
 class KingsChatService
 {
     /**
-     * Exchange the authorization code from the KingsChat app, then load the user's profile.
+     * Exchange the one-time authorization code from the KingsChat app for tokens, then work out who signed in.
      * Everything happens server-side; the app never sees KingsChat tokens.
+     *
+     * Token exchange (KingsChat docs): POST {token_url} with JSON {grant_type: "code", client_id, code}, no auth header.
+     * The reply holds access_token (a JWT), refresh_token and expires_in_millis. The user's details are read from the
+     * profile endpoint when it answers, and from the access token's own claims otherwise.
      *
      * @return array{id: string, name: string, email: ?string, avatar: ?string}
      */
@@ -22,33 +26,57 @@ class KingsChatService
         ]);
 
         if (! $token->successful()) {
-            throw new RuntimeException('KingsChat rejected the code (HTTP '.$token->status().').');
+            // KingsChat answers with {"code": "invalid_client|invalid_code|invalid_metadata|...", "user_message": "..."}.
+            throw new RuntimeException('KingsChat rejected the code (HTTP '.$token->status().', '.($token->json('code') ?? 'no code').': '.($token->json('user_message') ?? 'no message').').');
         }
 
         $access = $token->json('access_token') ?? $token->json('data.access_token');
         if (! $access) throw new RuntimeException('KingsChat returned no access token.');
 
-        $res = Http::withToken($access)->acceptJson()->timeout(15)->get(config('kingschat.profile_url'));
-        if (! $res->successful()) {
-            throw new RuntimeException('KingsChat profile request failed (HTTP '.$res->status().').');
+        $claims = $this->claims((string) $access);
+
+        // Profile details are a bonus: if that endpoint is unavailable we still sign the user in from the token's claims.
+        $u = [];
+        if ($profileUrl = config('kingschat.profile_url')) {
+            try {
+                $res = Http::withToken($access)->acceptJson()->timeout(15)->get($profileUrl);
+                if ($res->successful()) {
+                    $j = $res->json();
+                    $u = (array) (data_get($j, 'profile') ?? data_get($j, 'data.profile') ?? data_get($j, 'data.user') ?? data_get($j, 'user') ?? data_get($j, 'data') ?? $j);
+                }
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
-        $j = $res->json();
-        $u = data_get($j, 'profile') ?? data_get($j, 'data.profile') ?? data_get($j, 'data.user') ?? data_get($j, 'user') ?? data_get($j, 'data') ?? $j;
+        $pick = fn (array $keys) => collect($keys)->map(fn ($k) => data_get($u, $k) ?? data_get($claims, $k))->first(fn ($v) => filled($v) && is_scalar($v));
 
-        $id = data_get($u, 'user_id') ?? data_get($u, 'id') ?? data_get($u, '_id') ?? data_get($u, 'username');
-        if (! $id) throw new RuntimeException('KingsChat profile had no user id.');
+        $id = $pick(['user_id', 'id', '_id', 'sub', 'username']);
+        if (! $id) throw new RuntimeException('KingsChat did not tell us who signed in (no user id in the profile or the token).');
 
-        $email = data_get($u, 'email.address') ?? data_get($u, 'email');
-        $name = data_get($u, 'name')
-            ?? trim((string) data_get($u, 'first_name').' '.(string) data_get($u, 'last_name'))
-            ?: (string) data_get($u, 'username', 'KingsChat user');
+        $email = $pick(['email.address', 'email']);
+        $first = $pick(['first_name', 'given_name']);
+        $last = $pick(['last_name', 'family_name']);
+        $name = $pick(['name', 'display_name']) ?? trim($first.' '.$last) ?: (string) ($pick(['username']) ?? 'KingsChat user');
+        $avatar = $pick(['avatar_url', 'avatar', 'profile_image_url', 'picture']);
 
         return [
             'id' => (string) $id,
             'name' => (string) $name,
             'email' => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL) ? strtolower($email) : null,
-            'avatar' => ($a = data_get($u, 'avatar_url') ?? data_get($u, 'avatar') ?? data_get($u, 'profile_image_url')) && is_string($a) ? $a : null,
+            'avatar' => is_string($avatar) ? $avatar : null,
         ];
+    }
+
+    /** Payload of a JWT. The token came straight from KingsChat over HTTPS in answer to our own request, so it is read, not re-verified. */
+    private function claims(string $jwt): array
+    {
+        $parts = explode('.', $jwt);
+        if (count($parts) < 2) return [];
+
+        $json = base64_decode(strtr($parts[1], '-_', '+/').str_repeat('=', (4 - strlen($parts[1]) % 4) % 4), true);
+        $data = $json ? json_decode($json, true) : null;
+
+        return is_array($data) ? $data : [];
     }
 }

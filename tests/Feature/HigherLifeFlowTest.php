@@ -107,6 +107,29 @@ class HigherLifeFlowTest extends TestCase
         $this->assertSame(1, User::where('kingschat_id', 'kc-123')->count());
     }
 
+    public function test_kingschat_sign_in_works_from_the_token_when_the_profile_endpoint_fails(): void
+    {
+        config(['kingschat.client_id' => 'test-client']);
+        $b64 = fn (array $d) => rtrim(strtr(base64_encode(json_encode($d)), '+/', '-_'), '=');
+        $jwt = $b64(['alg' => 'RS256']).'.'.$b64(['sub' => 'kc-jwt-9', 'name' => 'Tunde Ade', 'email' => 'tunde@example.com']).'.sig';
+        Http::fake([
+            'connect.kingsch.at/developer/api/oauth2/token' => Http::response(['access_token' => $jwt, 'refresh_token' => 'r', 'expires_in_millis' => 3600000]),
+            'connect.kingsch.at/developer/api/profile' => Http::response(['message' => 'nope'], 404),
+        ]);
+
+        $this->postJson('/api/v1/auth/kingschat', ['code' => 'one-time-code'])->assertOk()->assertJsonStructure(['user' => ['id'], 'token']);
+        $this->assertDatabaseHas('users', ['kingschat_id' => 'kc-jwt-9', 'email' => 'tunde@example.com']);
+    }
+
+    public function test_kingschat_rejected_code_is_refused(): void
+    {
+        config(['kingschat.client_id' => 'test-client']);
+        Http::fake(['connect.kingsch.at/developer/api/oauth2/token' => Http::response(['code' => 'invalid_code', 'user_message' => 'expired'], 422)]);
+
+        $this->postJson('/api/v1/auth/kingschat', ['code' => 'bad'])->assertStatus(422);
+        $this->assertDatabaseCount('users', 1); // only the seeded admin
+    }
+
     public function test_admin_bypasses_the_paywall_and_non_admin_cannot_open_admin_panel(): void
     {
         $admin = User::where('email', 'admin@higherlife.app')->first();

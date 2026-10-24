@@ -107,8 +107,18 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $request->validate(['email' => 'required|email']);
-        Password::sendResetLink($request->only('email'));
-        return response()->json(['message' => 'If that email exists, a reset link is on its way.']);
+
+        try {
+            // KingsChat accounts without a real email carry a placeholder address; there is nothing to send to.
+            if (! str_ends_with(strtolower($request->input('email')), '@kingschat.invalid')) {
+                Password::sendResetLink($request->only('email'));
+            }
+        } catch (\Throwable $e) {
+            // Usually the mail server settings. Log it for you, but never reveal to the caller whether an account exists.
+            report($e);
+        }
+
+        return response()->json(['message' => 'If that email is registered, we have sent a link to reset your password. It can take a minute, and may land in spam.']);
     }
 
     public function resetPassword(Request $request)

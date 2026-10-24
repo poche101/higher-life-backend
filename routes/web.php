@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\PasswordResetPageController;
 use App\Http\Controllers\PaymentReturnController;
 use App\Livewire\Admin;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,10 @@ Route::get('pay/{reference}', [PaymentReturnController::class, 'checkout'])->mid
 // Espees Merchant dashboard URLs. They only DISPLAY a verified status; they never activate anything on their own.
 Route::get('payment/success', [PaymentReturnController::class, 'success'])->middleware('throttle:30,1')->name('payment.success');
 Route::get('payment/failed', [PaymentReturnController::class, 'failed'])->middleware('throttle:30,1')->name('payment.failed');
+
+// Password reset: the link in the reset email opens this page.
+Route::get('reset-password/{token}', [PasswordResetPageController::class, 'show'])->middleware('throttle:30,1')->name('password.reset');
+Route::post('reset-password', [PasswordResetPageController::class, 'update'])->middleware('throttle:10,1')->name('password.update');
 
 Route::prefix('admin')->group(function () {
     Route::get('login', Admin\Login::class)->name('login')->middleware('guest');

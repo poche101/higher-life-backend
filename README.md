@@ -15,7 +15,7 @@ In `.env` configure MySQL, Redis (`QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`)
 ```
 ESPEE_DRIVER=espee           # espee (Pay with Espees button, production) | transfer (manual fallback) | fake (local only)
 ESPEE_BUTTON_ID=695bc9cfc64c3fc1adbce8ba3b559465   # id inside Espeespaybutton("...") from the Espees Merchant dashboard
-TRIAL_DAYS=7                 # free trial for every new account (0 = off)
+TRIAL_DAYS=30                # free trial for every new account (0 = off)
 ESPEE_API_KEY=               # developer-console token, used only to confirm payments (not the merchant ID / wallet address)
 ESPEE_TRANSFER_CODE=z5project  # only used by the transfer fallback (placeholder)
 ESPEE_CURRENCY=ESP
@@ -93,6 +93,26 @@ php artisan test
 
 
 ## Free trial
-Every new account gets `TRIAL_DAYS` (default 7) days of full access to the affirmations (`users.trial_ends_at`).
+Every new account gets `TRIAL_DAYS` (default 30) days of full access to the affirmations (`users.trial_ends_at`).
 When it ends the API answers 402 and the app shows the paywall. Paying during the trial starts the paid month when the trial ends.
-Run `php artisan migrate` to add the column; existing never-subscribed users get a 7-day trial from migration time.
+Run `php artisan migrate` to add the column; existing never-subscribed users get a free trial from migration time.
+
+
+## Password reset and email
+`POST /api/v1/auth/forgot-password {email}` emails a branded link to `/reset-password/{token}?email=...` (a page served by Laravel, with a
+show/hide eye on both fields). The link works for 60 minutes (`config/auth.php`, `passwords.users.expire`) and only once; a successful reset also signs the
+account out of every device. The answer never reveals whether an email is registered.
+
+Nothing arrives unless the server can send mail. In `.env` (example with SMTP; Mailgun, Postmark, SES, Brevo etc. work too):
+```
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.your-provider.com
+MAIL_PORT=587
+MAIL_USERNAME=your-username
+MAIL_PASSWORD=your-password
+MAIL_SCHEME=smtp          # or smtps for port 465
+MAIL_FROM_ADDRESS=no-reply@christembassylz5.org
+MAIL_FROM_NAME="Higher Life"
+```
+Then `php artisan config:cache`. With the default `MAIL_MAILER=log` emails are only written to `storage/logs/laravel.log`.
+Send yourself a test: `php artisan tinker --execute="Mail::raw('Test', fn(\$m) => \$m->to('you@example.com')->subject('Test'));"`

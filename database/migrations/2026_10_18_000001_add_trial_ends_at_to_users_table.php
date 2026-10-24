@@ -13,7 +13,7 @@ return new class extends Migration {
         });
 
         // Existing accounts that have never subscribed also get the free trial, counted from today.
-        $days = (int) config('higherlife.trial_days', 7);
+        $days = (int) config('higherlife.trial_days', 30);
         if ($days > 0) {
             DB::table('users')
                 ->whereNull('trial_ends_at')

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -35,9 +36,14 @@ class User extends Authenticatable
     {
         // Every new account (email sign-up, KingsChat, anything) starts with a free trial.
         static::creating(function (User $user) {
-            $days = (int) config('higherlife.trial_days', 7);
+            $days = (int) config('higherlife.trial_days', 30);
             if ($user->trial_ends_at === null && $days > 0) $user->trial_ends_at = now()->addDays($days);
         });
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 
     public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }

@@ -6,5 +6,5 @@ return [
     'text_only' => (bool) env('CONTENT_TEXT_ONLY', true),
 
     // Every new account gets this many days of full access before it has to subscribe. 0 turns the trial off.
-    'trial_days' => (int) env('TRIAL_DAYS', 7),
+    'trial_days' => (int) env('TRIAL_DAYS', 30),
 ];

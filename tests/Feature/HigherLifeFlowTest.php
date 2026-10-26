@@ -96,7 +96,7 @@ class HigherLifeFlowTest extends TestCase
         config(['kingschat.client_id' => 'test-client']);
         Http::fake([
             'connect.kingsch.at/developer/api/oauth2/token' => Http::response(['access_token' => 'kc-token']),
-            'connect.kingsch.at/developer/api/profile' => Http::response(['profile' => ['id' => 'kc-123', 'name' => 'Ada Obi']]),
+            'connect.kingsch.at/developer/api/user/profile' => Http::response(['profile' => ['id' => 'kc-123', 'name' => 'Ada Obi']]),
         ]);
 
         $this->postJson('/api/v1/auth/kingschat', ['code' => 'one-time-code'])->assertOk()->assertJsonStructure(['user' => ['id'], 'token']);
@@ -114,7 +114,7 @@ class HigherLifeFlowTest extends TestCase
         $jwt = $b64(['alg' => 'RS256']).'.'.$b64(['sub' => 'kc-jwt-9', 'name' => 'Tunde Ade', 'email' => 'tunde@example.com']).'.sig';
         Http::fake([
             'connect.kingsch.at/developer/api/oauth2/token' => Http::response(['access_token' => $jwt, 'refresh_token' => 'r', 'expires_in_millis' => 3600000]),
-            'connect.kingsch.at/developer/api/profile' => Http::response(['message' => 'nope'], 404),
+            'connect.kingsch.at/developer/api/user/profile' => Http::response(['message' => 'nope'], 404),
         ]);
 
         $this->postJson('/api/v1/auth/kingschat', ['code' => 'one-time-code'])->assertOk()->assertJsonStructure(['user' => ['id'], 'token']);
